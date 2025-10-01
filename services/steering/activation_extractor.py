@@ -2,7 +2,7 @@
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from typing import Literal
+from typing import Literal, Optional
 from loguru import logger
 from tqdm import tqdm
 import numpy as np
@@ -156,6 +156,61 @@ class ActivationExtractor:
             results.append(result)
 
         return results
+
+    def get_activations(
+        self,
+        prompts: list[str] | str,
+        layer: int,
+    ) -> np.ndarray:
+        """
+        Simple interface to extract activations for prompts at a specific layer.
+
+        Args:
+            prompts: A single prompt string or list of prompts
+            layer: Layer index to extract from
+
+        Returns:
+            Activations as numpy array of shape (num_prompts, hidden_dim)
+        """
+        if self.model is None:
+            self.load_model()
+
+        # Convert single prompt to list
+        if isinstance(prompts, str):
+            prompts = [prompts]
+
+        # Clear previous activations
+        self.activations = {}
+
+        # Register hook
+        layer_module = self._get_layer_module(layer)
+        hook_handle = layer_module.register_forward_hook(self._create_hook(layer))
+
+        try:
+            # Process in batches
+            for i in range(0, len(prompts), self.config.batch_size):
+                batch_prompts = prompts[i:i + self.config.batch_size]
+
+                # Tokenize
+                inputs = self.tokenizer(
+                    batch_prompts,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=self.config.max_seq_length,
+                ).to(self.config.device)
+
+                # Forward pass
+                with torch.no_grad():
+                    _ = self.model(**inputs)
+
+            # Concatenate all activations
+            all_activations = np.concatenate(self.activations[layer], axis=0)
+            return all_activations
+
+        finally:
+            # Clean up hook
+            hook_handle.remove()
 
     def cleanup(self):
         """Clean up model from memory."""

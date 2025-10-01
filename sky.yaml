@@ -2,8 +2,8 @@ name: base-experiments
 
 resources:
   cloud: runpod
-  # accelerators: H100-SXM:1
-  accelerators: RTX4090:1
+  accelerators: H100-SXM:1
+  # accelerators: RTX4090:1
   cpus: 8+
   memory: 32+
   disk_size: 200
@@ -17,13 +17,40 @@ workdir: .
 setup: |
   set -e
 
+  # Configure git identity (REPLACE WITH YOUR INFO)
+  git config --global user.name "ajobi-uhc"
+  git config --global user.email "aryajakkli2002@gmail.com"
+  
+  # Configure git safe directory for the workspace
+  git config --global --add safe.directory '*'
+  
+  # Set up git remote if it doesn't exist
+  if [ -d .git ]; then
+    # Replace with your actual repo URL
+    REPO_URL=$REPO_URL
+    
+    if ! git remote get-url gogo &> /dev/null; then
+      git remote add gogo "$REPO_URL"
+      echo "Added git remote: $REPO_URL"
+    else
+      echo "Git remote already exists: $(git remote get-url gogo)"
+    fi
+  fi
+
   # Install uv if not present
   if ! command -v uv &> /dev/null; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
     source $HOME/.cargo/env
   fi
 
+  # Sync Python dependencies
   uv sync && source .venv/bin/activate
+  
+  # Install Claude Code (CLI tool)
+  if ! command -v claude &> /dev/null; then
+    echo "Installing Claude Code..."
+    curl -sSL https://docs.claude.com/install.sh | bash
+  fi
   
   echo "Setup completed successfully"
 
